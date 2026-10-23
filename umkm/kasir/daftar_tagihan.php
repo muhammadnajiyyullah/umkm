@@ -1,0 +1,26 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/../config/cek_akses.php';
+require_once __DIR__ . '/../config/data.php';
+wajib_role(['kasir']);
+$user = current_user();
+$pdo = db();
+// Kasir hanya menangani pesanan yang sudah diantar ke meja.
+$search = trim((string)($_GET['q'] ?? ''));
+$filter = ['statuses' => ['Menunggu Bayar'], 'limit' => 100];
+if ($search !== '') {
+    $filter['search'] = $search;
+}
+$orders = data_orders($pdo, $filter);
+$topbarStats = data_dashboard($pdo, 'kasir', (int)$user['id']);
+$activeMenu = 'bills';
+$pageTitle = 'Daftar Tagihan';
+$pageSubtitle = 'Pesanan yang sudah diantar ke meja dan siap ditagih.';
+require __DIR__ . '/../layout/header.php';
+?>
+<div class="page-heading"><div class="page-heading-copy"><span class="eyebrow">Service flow · 03</span><h1 class="page-title">Daftar Tagihan</h1><p class="page-subtitle">Pilih pesanan, konfirmasi pembayaran, lalu cetak struk.</p></div><div class="page-actions"><a class="btn btn-ghost" href="<?= e(url('kasir/transaksi.php')) ?>"><?= icon('wallet') ?> Riwayat transaksi</a></div></div>
+<div class="stats-grid"><article class="card stat-card"><div class="stat-top"><span class="stat-label">Perlu dibayar</span><span class="stat-icon gold"><?= icon('receipt') ?></span></div><div class="stat-value"><?= count($orders) ?> tagihan</div><div class="stat-foot"><span class="stat-trend"><?= icon('spark') ?> antrian live</span></div></article><article class="card stat-card"><div class="stat-top"><span class="stat-label">Total tertunda</span><span class="stat-icon clay"><?= icon('wallet') ?></span></div><div class="stat-value"><?= e(money(array_sum(array_map(static fn(array $order): int => (int)$order['total'], $orders)))) ?></div><div class="stat-foot"><span class="stat-trend"><?= icon('trend') ?> potensi pendapatan</span></div></article><article class="card stat-card"><div class="stat-top"><span class="stat-label">Siap diantar</span><span class="stat-icon sage"><?= icon('check') ?></span></div><div class="stat-value"><?= count($orders) ?> pesanan</div><div class="stat-foot"><span class="stat-trend"><?= icon('check') ?> menunggu bayar</span></div></article><article class="card stat-card"><div class="stat-top"><span class="stat-label">Rata-rata tagihan</span><span class="stat-icon blue"><?= icon('trend') ?></span></div><div class="stat-value"><?= e(money($orders ? array_sum(array_map(static fn(array $order): int => (int)$order['total'], $orders)) / count($orders) : 0)) ?></div><div class="stat-foot"><span class="stat-trend"><?= icon('clipboard') ?> per tagihan</span></div></article></div>
+<section class="card"><div class="filter-bar"><form class="flex gap-9 items-center flex-wrap" method="get"><div class="search-box"><?= icon('search') ?><input class="form-control" name="q" value="<?= e($search) ?>" placeholder="Cari nama pelanggan, kode, atau meja"></div><select class="form-select" name="status"><option value="all" selected>Semua status bayar</option></select><button class="btn btn-primary btn-sm" type="submit"><?= icon('filter') ?> Cari</button></form><div class="filter-spacer"></div><span class="queue-live"><i></i> Auto refresh 30 detik</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Pesanan</th><th>Meja</th><th>Pelanggan</th><th>Item</th><th>Waktu</th><th>Status</th><th class="text-right">Total</th><th></th></tr></thead><tbody><?php foreach ($orders as $order): ?><tr><td><div class="primary-cell"><?= e($order['kode_pesanan'] ?? '-') ?></div><div class="secondary-cell"><?= e($order['pelayan'] ?? '-') ?></div></td><td><div class="table-number <?= !$order['meja'] ? 'takeaway' : '' ?>" style="width:32px;height:32px;font-size:13px"><?= $order['meja'] ? e($order['meja']) : '↗' ?></div></td><td><div class="customer-cell"><span class="customer-avatar <?= e(avatar_color(order_pelanggan($order, 'anon'))) ?>"><?= e(initials(order_pelanggan($order, 'Pelanggan'))) ?></span><div><div class="primary-cell"><?= e(order_pelanggan($order)) ?></div><div class="secondary-cell"><?= e($order['tipe_pesanan'] === 'takeaway' ? 'Takeaway' : 'Makan di tempat') ?></div></div></div></td><td><div class="primary-cell"><?= count($order['items'] ?? []) ?> item</div><div class="secondary-cell"><?= e(implode(', ', array_slice(array_map(static fn(array $item): string => $item['nama'], $order['items'] ?? []), 0, 2))) ?></div></td><td class="muted"><?= e(relative_time($order['created_at'] ?? null)) ?></td><td><span class="badge badge-<?= e(status_class((string)$order['status'])) ?>"><?= e(status_label((string)$order['status'])) ?></span></td><td class="text-right primary-cell"><?= e(money($order['total'] ?? 0)) ?></td><td class="text-right"><a class="btn btn-primary btn-sm" href="<?= e(url('kasir/proses_bayar.php?id=' . (int)$order['id'])) ?>"><?= icon('wallet') ?> Bayar</a></td></tr><?php endforeach; ?><?php if (!$orders): ?><tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon"><?= icon('check') ?></div><strong>Tidak ada tagihan menunggu</strong><p>Semua pesanan sudah lunas atau belum siap diantar.</p></div></td></tr><?php endif; ?></tbody></table></div></section>
+<script>setTimeout(()=>location.reload(),30000);</script>
+<?php require __DIR__ . '/../layout/footer.php'; ?>
